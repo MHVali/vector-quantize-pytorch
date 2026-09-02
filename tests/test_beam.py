@@ -105,6 +105,29 @@ def test_topk_channel_first(training):
     assert loss.shape == (2, 4, 2)
 
 @param('training', (True, False))
+def test_topk_channel_first_with_mask(training):
+
+    vq = VectorQuantize(dim = 16, codebook_size = 8, channel_last = False)
+    vq.train(training)
+
+    x = torch.randn(2, 16, 4).requires_grad_(training)
+    mask = torch.tensor([
+        [True, True, True, False],
+        [True, False, False, False]
+    ])
+
+    quantize, indices, loss = vq(x, mask = mask, topk = 2)
+
+    assert quantize.shape == (2, 16, 4, 2)
+    assert indices.shape == (2, 4, 2)
+    assert loss.shape == (2, 4, 2)
+
+    quantize = quantize.permute(0, 2, 1, 3)
+
+    assert torch.equal(quantize[~mask], torch.zeros_like(quantize[~mask]))
+    assert torch.equal(indices[~mask], torch.full_like(indices[~mask], -1))
+
+@param('training', (True, False))
 def test_topk_image_fmap(training):
 
     vq = VectorQuantize(dim = 16, codebook_size = 8, accept_image_fmap = True)
@@ -170,3 +193,33 @@ def test_beam_search_with_batched_mask(training):
     assert torch.isfinite(quantized).all()
     assert torch.isfinite(commit_loss).all()
     assert torch.equal(indices[~mask], torch.full_like(indices[~mask], -1))
+
+@param('training', (True, False))
+@param('return_zeros_for_masked_padding', (True, False))
+def test_beam_search_masked_padding(training, return_zeros_for_masked_padding):
+
+    from vector_quantize_pytorch import ResidualVQ
+
+    residual_vq = ResidualVQ(
+        dim = 8,
+        codebook_dim = 4,
+        num_quantizers = 3,
+        codebook_size = 16,
+        beam_size = 2,
+        eval_beam_size = 2,
+        return_zeros_for_masked_padding = return_zeros_for_masked_padding
+    )
+
+    residual_vq.train(training)
+
+    x = torch.randn(2, 5, 8).requires_grad_(training)
+    mask = torch.tensor([
+        [True, True, True, False, False],
+        [True, True, False, False, False]
+    ])
+
+    quantized, _, _ = residual_vq(x, mask = mask)
+
+    expected_padding = torch.zeros_like(x) if return_zeros_for_masked_padding else x
+
+    assert torch.equal(quantized[~mask], expected_padding[~mask])

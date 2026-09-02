@@ -185,6 +185,7 @@ class ResidualVQ(Module):
         eval_beam_size = None,
         beam_score_quantizer_weights: list[float] | None = None,
         quant_grad_frac = 0.,
+        return_zeros_for_masked_padding = True,
         **vq_kwargs
     ):
         super().__init__()
@@ -201,6 +202,9 @@ class ResidualVQ(Module):
         self.has_projections = requires_projection
 
         self.accept_image_fmap = accept_image_fmap
+
+        self.return_zeros_for_masked_padding = return_zeros_for_masked_padding
+        vq_kwargs.update(return_zeros_for_masked_padding = return_zeros_for_masked_padding)
 
         self.implicit_neural_codebook = implicit_neural_codebook
 
@@ -396,6 +400,8 @@ class ResidualVQ(Module):
         # variables
 
         input_shape, num_quant, quant_dropout_multiple_of, return_loss, device = x.shape, self.num_quantizers, self.quantize_dropout_multiple_of, exists(indices), x.device
+
+        orig_input = x
 
         beam_size = default(beam_size, self.beam_size if self.training else self.eval_beam_size)
 
@@ -608,6 +614,21 @@ class ResidualVQ(Module):
         # project out, if needed
 
         quantized_out = self.project_out(quantized_out)
+
+        # if masking, only return quantized for where mask has True
+
+        if exists(mask):
+            masked_out_value = orig_input
+
+            if self.return_zeros_for_masked_padding:
+                masked_out_value = torch.zeros_like(quantized_out)
+
+            quantized_out = einx.where(
+                'b n, b n d, b n d -> b n d',
+                mask,
+                quantized_out,
+                masked_out_value
+            )
 
         # whether to early return the cross entropy loss
 

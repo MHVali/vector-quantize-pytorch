@@ -1154,6 +1154,7 @@ class VectorQuantize(Module):
 
         if need_transpose:
             x = rearrange(x, 'b d n -> b n d')
+            orig_input = rearrange(orig_input, 'b d n -> b n d')
 
         # project input
 
@@ -1386,20 +1387,6 @@ class VectorQuantize(Module):
 
         quantize = self.project_out(quantize)
 
-        # rearrange quantized embeddings
-
-        if need_transpose:
-            quantize = rearrange(quantize, 'b n ... d -> b d n ...')
-
-        if self.accept_image_fmap:
-            quantize = rearrange(quantize, 'b (h w) ... c -> b c h w ...', h = height, w = width)
-
-        if self.accept_3d_fmap:
-            quantize = rearrange(quantize, "b (d h w) ... c -> b c d h w ...", d=depth, h=height, w=width)
-
-        if only_one:
-            quantize = rearrange(quantize, 'b 1 ... d -> b ... d')
-
         # if masking, only return quantized for where mask has True
 
         if exists(mask):
@@ -1407,9 +1394,6 @@ class VectorQuantize(Module):
 
             if self.return_zeros_for_masked_padding:
                 masked_out_value = torch.zeros_like(orig_input)
-
-            if need_transpose:
-                masked_out_value = rearrange(masked_out_value, 'b d n -> b n d')
 
             if is_topk:
                 masked_out_value = repeat(masked_out_value, '... d -> ... k d', k = topk)
@@ -1427,6 +1411,20 @@ class VectorQuantize(Module):
                 embed_ind,
                 -1
             )
+
+        # rearrange quantized embeddings
+
+        if need_transpose:
+            quantize = rearrange(quantize, 'b n ... d -> b d n ...')
+
+        if self.accept_image_fmap:
+            quantize = rearrange(quantize, 'b (h w) ... c -> b c h w ...', h = height, w = width)
+
+        if self.accept_3d_fmap:
+            quantize = rearrange(quantize, "b (d h w) ... c -> b c d h w ...", d=depth, h=height, w=width)
+
+        if only_one:
+            quantize = rearrange(quantize, 'b 1 ... d -> b ... d')
 
         if not return_loss_breakdown:
             return quantize, embed_ind, loss
