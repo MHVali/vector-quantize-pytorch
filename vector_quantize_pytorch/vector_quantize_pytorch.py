@@ -1295,7 +1295,7 @@ class VectorQuantize(Module):
             commit_loss = reduce(commit_loss, '... k d -> ... k', 'mean')
 
             if exists(mask):
-                commit_loss = einx.where('..., ... k, -> ... k', mask, commit_loss, 0.)
+                commit_loss = einx.where('b n, b n ... k, -> b n ... k', mask, commit_loss, 0.)
 
             loss = commit_loss * self.commitment_weight if self.has_commitment_loss else commit_loss
 
@@ -1327,7 +1327,7 @@ class VectorQuantize(Module):
                         commit_loss = reduce(commit_loss, '... k d -> ... k', 'mean')
 
                         if exists(mask):
-                            commit_loss = einx.where('..., ... k, -> ... k', mask, commit_loss, 0.)
+                            commit_loss = einx.where('b n, b n ... k, -> b n ... k', mask, commit_loss, 0.)
 
                     elif exists(mask):
                         # with variable lengthed sequences
@@ -1408,8 +1408,14 @@ class VectorQuantize(Module):
             if self.return_zeros_for_masked_padding:
                 masked_out_value = torch.zeros_like(orig_input)
 
+            if need_transpose:
+                masked_out_value = rearrange(masked_out_value, 'b d n -> b n d')
+
+            if is_topk:
+                masked_out_value = repeat(masked_out_value, '... d -> ... k d', k = topk)
+
             quantize = einx.where(
-                'b n, b n ... d, b n d -> b n ... d',
+                'b n, b n ... d, b n ... d -> b n ... d',
                 mask,
                 quantize,
                 masked_out_value

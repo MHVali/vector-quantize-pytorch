@@ -577,7 +577,7 @@ class ResidualVQ(Module):
 
             if exists(mask):
                 all_losses = einx.where('..., ... l,', mask, all_losses, 0.)
-                all_losses = reduce(all_losses, '... l -> l', 'sum') / mask.sum(dim = -1).clamp_min(1e-4)
+                all_losses = reduce(all_losses, '... l -> l', 'sum') / mask.sum().clamp_min(1e-4)
             else:
                 all_losses = reduce(all_losses, '... l -> l', 'mean')
 

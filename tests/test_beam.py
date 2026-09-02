@@ -139,3 +139,34 @@ def test_topk_auto_cast_and_clamp():
 
     quantize, indices, _ = vq(torch.randn(2, 4, 16), topk = 9)
     assert indices.shape == (2, 4, 8)
+
+@param('training', (True, False))
+def test_beam_search_with_batched_mask(training):
+
+    from vector_quantize_pytorch import ResidualVQ
+
+    residual_vq = ResidualVQ(
+        dim = 8,
+        codebook_dim = 4,
+        num_quantizers = 3,
+        codebook_size = 16,
+        beam_size = 2,
+        eval_beam_size = 2
+    )
+
+    residual_vq.train(training)
+
+    x = torch.randn(2, 5, 8).requires_grad_(training)
+    mask = torch.tensor([
+        [True, True, True, False, False],
+        [True, True, False, False, False]
+    ])
+
+    quantized, indices, commit_loss = residual_vq(x, mask = mask)
+
+    assert quantized.shape == x.shape
+    assert indices.shape == (2, 5, 3)
+    assert commit_loss.shape == (3,)
+    assert torch.isfinite(quantized).all()
+    assert torch.isfinite(commit_loss).all()
+    assert torch.equal(indices[~mask], torch.full_like(indices[~mask], -1))
