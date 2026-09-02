@@ -11,7 +11,7 @@ from vector_quantize_pytorch.finite_scalar_perturbation import build_cdf_act
 def test_cdf_act_roundtrip(act_name):
     act_func, inv_act_func = build_cdf_act(act_name)
 
-    x = torch.randn(64, 10)
+    x = torch.randn(64, 10).clamp(-3., 3.)
     y = act_func(x)
     x_hat = inv_act_func(y)
     assert (y > 0.0).all() and (y < 1.0).all()
